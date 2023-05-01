@@ -77,7 +77,7 @@ q <- 3    # number of multiple responses
 response_types <- c('binary','continuous','count')
 
 # Set seed to reproduce results later
-set.seed(1)
+set.seed(123)
 
 # Generate p-by-q regression coefficients matrix B0, where s=# of nonzero rows.
 B0 <- generate_B0(p, s, response_types)
