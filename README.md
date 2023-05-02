@@ -99,8 +99,8 @@ response_types <- c('binary','continuous','count')
 
 output <- Mt_MBSP(X, Y, response_types)
 
-# VERY IMPORTANT: Need to make sure that the response_types argument in the Mt_MBSP function is correctly specified, 
-# otherwise the code may not run correctly!
+# VERY IMPORTANT: Need to make sure that the response_types argument in the Mt_MBSP function  
+# is correctly specified, otherwise the code may not run correctly!
 ```
 
 The main results of interest might be: `output$B_est` (posterior median estimate for regression coefficients matrix B), `output$B_active` (a binary matrix with `1` indicating that the variable is selected, and `0` indicating that it is not selected), `output$B_lower` (the 0.025 quantiles for the entries of B), and `output$B_upper` (the 0.975 quantiles for the entries of B).
