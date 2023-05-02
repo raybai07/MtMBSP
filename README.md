@@ -123,7 +123,7 @@ for(j in 1:p){
 }
 CP <- sum(coverage_mat)/(p*q)
 CP  
-# CP=1 
+# CP = 1
 
 # Variable selection performance for one-step estimator
 classifications <- rep(0, p)
