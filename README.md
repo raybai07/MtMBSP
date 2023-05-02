@@ -62,7 +62,7 @@ If `algorithm="2step"`, then the `Mt_MBSP` function will use a default of `bound
 
 ## 3. Additional Functions for Simulating Synthetic Data
 
-In addition, there are several functions `generate_B0`, `generate_Sigma0`, `generate_X`, and `generate_Y`, which are used to generate synthetic datasets for the simulation studies in Secion 5.1 of the manuscript.
+In addition, there are several functions `generate_B0`, `generate_Sigma0`, `generate_X`, and `generate_Y`, which are used to generate synthetic datasets for the simulation studies in Section 5.1 of the manuscript.
 
 We demonstrate the usage of these functions, in addition to the main `Mt_MBSP` function in the simulated examples below.
 
