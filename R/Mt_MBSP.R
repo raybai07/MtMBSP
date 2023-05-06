@@ -343,13 +343,15 @@ Mt_MBSP_Gibbs = function(X, Y, response_types, u, a, tau, d1, d2, c1, c2,
     Sigma <- MCMCpack::riwish(n+d1, (t(latentU)%*%latentU)+diag(q)*d2)
   
     # Update latent variables matrix U
-    mm <- diag(vecW)%*%as.vector(Z-X%*%B);
-    JJ <- chol2inv(chol(kronecker(Sigma,diag(n),"*")+diag(vecW)))
-    latentU <- matrix(mvtnorm::rmvnorm(1,JJ%*%mm, JJ),n,q,byrow=F)
+    tmp_mat <- Z-X%*%B
+    for(i in 1:n){
+       Omega_i <- diag(W[i,])
+       mm <- Omega_i%*%tmp_mat[i,]
+       JJ <- chol2inv(chol(Omega_i+Sigma))
+       latentU[i,] <- mvtnorm::rmvnorm(1, JJ%*%mm, JJ)
+    }
 
-    ##############################
-    # Sample zeta_i's and nu_i's #
-    ##############################
+    # Update zeta_i's and nu_i's
     for (i in 1:p){
       norm_term <- sum((t(B[i,]))^2) 
       v <- max(norm_term, .Machine$double.eps) # to prevent chi parameter from collapsing to 0
