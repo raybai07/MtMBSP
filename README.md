@@ -1,6 +1,6 @@
 # MtMBSP
 
-This is an R package to implement the Mixed-typed Multivariate Bayesian Model with Shrinkage Priors (Mt-MBSP) introduced by Shao-Hsuan Wang, Ray Bai, and Hsin-Hsiung Huang in their paper "Mixed-type Multivariate Bayesian Sparse Variable Selection with Shrinkage Priors" (pre-print, 2023+).
+This is an R package to implement the Mixed-typed Multivariate Bayesian Model with Shrinkage Priors (Mt-MBSP) introduced by Shao-Hsuan Wang, Ray Bai, and Hsin-Hsiung Huang in their paper "Mixed-type Multivariate Bayesian Sparse Variable Selection with Shrinkage Priors" (preprint: https://arxiv.org/abs/2201.12839).
 
 Our model implements Bayesian variable selection and estimation for mixed-type (i.e. mixture of continuous and discrete) multivariate regression using shrinkage priors. Specifically, the three parameter beta normal (TPBN) family of priors is used, which contains the horseshoe prior (Carvalho et al., 2010) as a special case. Our method enables joint analysis of mixed outcomes and facilitates variable selection when the number of covariates can be much larger than sample size. 
 For large p, we introduce a two-step variable selection approach that can also be implemented with this R package.
