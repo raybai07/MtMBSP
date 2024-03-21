@@ -18,10 +18,10 @@
 # c1 = shape parameter in gamma prior on dispersion parameter r for count data. Ignored for non-count responses.
 # c2 = rate parameter in gamma prior on dispersion parameter r for count data. Ignored for non-count responses.
 # algorithm = one-step ("1step") or two-step ("2step"). Default is "1-step."
-# niter = number of MCMC iterations to run for one-step algorithm.
-# burn = number of MCMC iterations to discard as burn-in for one-step algorithm.
-# step2_niter = number of MCMC iterations to run in step 2 of the two-step algorithm.
-# step2_burn = number of MCMC iterations to discard as burn-in in step 2 of the two-step algorithm.
+# niter = number of MCMC iterations to run for one-step algorithm. Default is 1100.
+# burn = number of MCMC iterations to discard as burn-in for one-step algorithm. Default is 100.
+# step2_niter = number of MCMC iterations to run in step 2 of the two-step algorithm. Default is 1100.
+# step2_burn = number of MCMC iterations to discard as burn-in in step 2 of the two-step algorithm. Default is 100.
 # threshold = threshold gamma to be used in Step 1 of the two-step algorithm. 
 #             If the user specifies a single value, then this threshold is used for gamma.
 #             If the user specifies a grid, then the function searches for the optimal gamma that minimizes WAIC.
