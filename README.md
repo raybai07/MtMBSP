@@ -73,13 +73,13 @@ To demonstrate the `Mt_MBSP` function, we first illustrate it on a small synthet
 
 ```
 n <- 100  # sample size 
-p <- 20   # number of covariates
+p <- 500  # number of covariates
 s <- 5    # number of significant covariates
 q <- 3    # number of multiple responses 
 response_types <- c('binary','continuous','count')
 
 # Set seed to reproduce results later
-set.seed(123)
+set.seed(1234)
 
 # Generate p-by-q regression coefficients matrix B0, where s=# of nonzero rows.
 B0 <- generate_B0(p, s, response_types)
@@ -112,7 +112,7 @@ We can also obtain the following performance metrics.
 # root mean squared error (rMSE) for one-step estimator
 rMSE <- sqrt(sum((output$B_est-B0)^2)/(p*q))
 rMSE
-# rMSE = 0.1755707
+# rMSE = 0.02911557
 
 # Coverage probability (CP) for one-step estimator
 coverage_mat <- matrix(0, nrow=p, ncol=q)
@@ -138,9 +138,9 @@ truth[true_nonzero_variables] <- 1
 
 # Compare selected variables to the ground truth significant variables 
 selected_variables 
-# 3 10 14 15 19
+# 101 284 336 406 492
 true_nonzero_variables
-# 3 10 14 15 19
+# 101 284 336 406 492
 ```
 
 ## 5. Example of the Two-step Approach for Large p
