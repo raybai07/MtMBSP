@@ -5,11 +5,11 @@
 \title{Fits the Mt-MBSP model using the three parameter beta normal (TPBN) family.}
 \usage{
   Mt_MBSP(X, Y, response_types, 
-          u=0.5, a=0.5, tau=.001, d1 = dim(Y)[2], d2=10, c1=10, c2=1,
+          u=0.5, a=0.5, tau=1/(dim(X)[2]*sqrt(dim(X)[1]*log(dim(X)[1]))), d1 = dim(Y)[2], d2=10, c1=10, c2=1,
           algorithm = c("1step","2step"),
-          step1_iter = 200, bound_error=0, 
-          max_iter = 2000, burnin=1000, 
-          details=TRUE)
+          niter = 1100, burn=100, step2_niter = 1100, step2_burn=100, 
+          threshold = seq(from=0.02, to=0.40, by=0.02),
+          parallelize = TRUE, ncores = 10)
 }
 \arguments{
   \item{X}{n-by-p design matrix.}
@@ -22,7 +22,7 @@
   
   \item{a}{second parameter in the TPBN family. Use (u,a)=(0.5,0.5) for the horseshoe prior.}
   
-  \item{tau}{global shrinkage parameter. Must be between 0 and 1.}
+  \item{tau}{global shrinkage parameter. Must be between 0 and 1. Default is 1/p*sqrt(n*log(n)). If this quantity is below 1e-5, then tau is reset to 1e-5.}
   
   \item{d1}{degrees of freedom in inverse-Wishart prior on Sigma. Default is q (number of reponses).}
   
@@ -32,30 +32,33 @@
   
   \item{c2}{rate parameter in gamma prior on dispersion parameter r for count data. Default is 1. Ignored for non-count responses.}
   
-  \item{algorithm}{Two options are allowed: "1step" or "2step". The default is "1step", but "2step" may give better estimation and variable selection and be faster if p is large.}
+  \item{algorithm}{Two options are allowed: "1step" or "2step". The default is "1step", but "2step" may give better estimation and variable selection if p is large, especially if there are many weak signals.}
   
-  \item{step1_iter}{number of iterations to run in step 1 of the two-step algorithm. This argument is ignored if algorithm=="1step". If algorithm=="2step", then default is 200.}
+  \item{niter}{number of MCMC iterations to run for either the one-step algorithm OR Step 1 of the two-step algorithm. Default is 1100.}
 
-  \item{bound_error}{Threshold gamma in Step 1 of the two-step algorithm. Default of 0 if we run the one-step algorithm and 0.02 if we run the two-step algorithm.}
-  
-    \item{max_iter}{total number of iterations to run in the Gibbs sampler. Default is 2000.}
+  \item{burn}{number of MCMC samples to discard as burnin for either the one-step algorithm OR Step 1 of the two-step algorithm. Default is 100.}
 
-    \item{burnin}{total number of burn-in iterations for the Gibbs sampler. Default is 1000.}
-    
-    \item{details}{Boolean variable for whether ot return the 0.025 and 0.975 quantiles and MCMC samples for the model parameters. Default is TRUE.}
-  
+  \item{step2_niter}{number of MCMC iterations to run in Step 2 of the two-step algorithm. This argument is only used if algorithm="2step". Default is 1100.}  
+
+  \item{step2_burn}{number of MCMC samples to discard as burnin in Step 2 of the two-step algorithm. This argument is only used if algorithm="2step". Default is 100.}
+
+  \item{threshold}{grid of gammas to tune the threshold gamma in Step 1 of the two-step algorithm using WAIC. This argument is only used if algorithm="2step". Default is a sequence 0.02, 0.04, ..., 0.40.}
+
+  \item{parallelize}{Boolean variable for whether or not to run Step 2 of the two-step algorithm in parallel for the grid of values in threshold. Default is "TRUE". This argument is only used if algorithm="2step".} 
+= 
+  \item{ncores}{Number of cores to use for parallelization of Step 2 of the two-step algorithm. This argument is only used if algorithm="2step".}
 }
 
 \value{The function returns a list containing the following components:
 \item{B_est}{posterior median estimate for p-by-q regression coefficients matrix B}
+\item{B_active}{binary matrix with "1" for selected variable and "0" for inactive variable}
 \item{B_lower}{0.025 quantile for posteriors of entries in B}
 \item{B_upper}{0.975 quantile for posteriors of entries in B}
-\item{B_active}{binary matrix with "1" for selected variable and "0" for inactive variable}
-\item{candidate_set}{If two-step method was used, this is the candidate set after Step 1}
-\item{B_samples}{MCMC samples of B saved after burnin}
 \item{Sigma_est}{posterior median estimate for Sigma}
 \item{Sigma_lower}{0.025 quantile for posterior of Sigma}
 \item{Sigma_upper}{0.975 quantile for posterior of Sigma}
+\item{opt_threshold}{The optimal gamma chosen for the two-step algorithm. This is only returned if algorithm="2step"}
+\item{B_samples}{MCMC samples of B saved after burnin. If algorithm="2step", then both Step 1 and Step 2 samples are returned}
 \item{Sigma_samples}{MCMC samples of Sigma saved after burnin}
 }
 
@@ -71,7 +74,7 @@
 # EXAMPLE WITH 3 DIFFERENT RESPONSE TYPES #
 ###########################################
 n <- 100  # sample size 
-p <- 20   # number of covariates
+p <- 500  # number of covariates
 s <- 5    # number of significant covariates
 q <- 3    # number of multiple responses 
 response_types <- c('binary','continuous','count')
