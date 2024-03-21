@@ -145,7 +145,7 @@ true_nonzero_variables
 
 ## 5. Example of the Two-step Approach for Large p
 
-When p is large, it may be advantageous to use the two-step approach. The first step of our two-stage algorithm screens out a large number of variables using only a tiny number of Gibbs sampling steps and a thresholding rule. An optimal threshold is chosen from a grid of candidate values in `threshold'. In the second step, the remaining regression coefficients are estimated with the Gibbs sampler.
+When p is large, it may be advantageous to use the two-step approach. The first step of our two-stage algorithm screens out a large number of variables using Gibbs sampling and a thresholding rule. An optimal threshold is chosen from a grid of candidate values in `threshold'. In the second step, the remaining regression coefficients are estimated with the Gibbs sampler.
 
 Below, we demonstrate how to use the `Mt_MBSP` function with the two-step algorithm on a simulated dataset with n=150, p=1000, s=10 (where s is the number of significant covariates), and q=4 responses with two continuous and two binary responses, i.e. `response_types = c('continuous','binary','continuous','binary')`.
 
