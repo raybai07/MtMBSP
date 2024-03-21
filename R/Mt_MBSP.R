@@ -17,35 +17,53 @@
 # d2 = scale parameter in inverse-Wishart prior on Sigma
 # c1 = shape parameter in gamma prior on dispersion parameter r for count data. Ignored for non-count responses.
 # c2 = rate parameter in gamma prior on dispersion parameter r for count data. Ignored for non-count responses.
-# algorithm = one-step ("1step") or two-step ("2step")
-# step1_iter = number of iterations to run in step 1 of the two-step algorithm. This argument is ignored if
-#              algorithm=="1step". If algorithm=="2step", then default is 200  
-# bound_error = threshold gamma in Step 1 of the two-step algorithm. 
-#               Default of 0 if we run the one-step-algorithm and 0.02 if we run
-#               the two-step algorithm.
-# max_iter = total number of iterations to run in the Gibbs sampler
-# burnin = total number of burn-in iterations for the Gibbs sampler
-# details = Boolean variable for whether to return the 0.025 and 0.975 quantiles 
-#           and MCMC samples for the model parameters.
+# algorithm = one-step ("1step") or two-step ("2step"). Default is "1-step."
+# niter = number of MCMC iterations to run for one-step algorithm.
+# burn = number of MCMC iterations to discard as burn-in for one-step algorithm.
+# step2_niter = number of MCMC iterations to run in step 2 of the two-step algorithm.
+# step2_burn = number of MCMC iterations to discard as burn-in in step 2 of the two-step algorithm.
+# threshold = threshold gamma to be used in Step 1 of the two-step algorithm. 
+#             If the user specifies a single value, then this threshold is used for gamma.
+#             If the user specifies a grid, then the function searches for the optimal gamma that minimizes WAIC.
+#             Default is to search a grid from 0.02 to 0.40.
+#             This argument is ignored if algorithm="1step"
+# parallelize = Boolean variable for whether or not to parallelize Step 2 of the two-step algorithm.
+#               This argument is ignored if algorithm="1step"
+# ncores = number of cores to use for parallelization if parallelize=TRUE
 
 # OUTPUT:
 # B_est = posterior median estimate for p-by-q regression coefficients matrix B
-# B_lower = 0.025 quantile for posteriors of entries in B
-# B_upper = 0.975 quantile for posteriors of entries in B
 # B_active = binary matrix with "1" for selected variable and "0" for inactive variable
-# candidate_set = If two-step method was used, this is the candidate set after Step 1
-# B_samples = MCMC samples of B saved after burnin
+# B_lower = lower endpoints of 95% uncertainty intervals for entries in B. 
+#           If the two-step algorithm is used and the estimated entry of B_est is exactly zero, then 
+#           this returns the lower endpoint of the posterior credible interval obtained from Step 1.
+# B_upper = upper endpoints of 95% uncertainty intervals for entries in B.
+#           If the two-step algorithm is used and the estimated entry of B_est is exactly zero, then 
+#           this returns the upper endpoint of the posterior credible interval obtained from Step 2.
 # Sigma_est = posterior median estimate for Sigma
-# Sigma_lower = 0.025 quantile for posterior of Sigma
-# Sigma_upper = 0.975 quantile for posterior of Sigma
-# Sigma_samples = MCMC samples of Sigma saved after burnin
+# Sigma_lower = lower endpoints of 95% uncertainty intervals for entries in Sigma
+# Sigma_upper = upper endpoints of 95% uncertainty intervals for entries in Sigma
+# opt_threshold = optimal gamma chosen by minimizing WAIC. Only returned if "2step" is used for algorithm
+# B_samples = MCMC samples of B saved after burn.
+#             If algorithm="2step", then the MCMC samples from Step 1 and Step 2 are both returned for B
+# Sigma_samples = MCMC samples of Sigma saved after burn
 
+
+###################
+## MAIN FUNCTION ##
+###################
 Mt_MBSP = function(X, Y, response_types, 
-                   u=0.5, a=0.5, tau=.001, d1 = dim(Y)[2], d2=10, c1=10, c2=1,
+                   u=0.5, a=0.5, tau=1/(dim(X)[2]*sqrt(dim(X)[1]*log(dim(X)[1]))), 
+                   d1 = dim(Y)[2], d2=10, c1=10, c2=1,
                    algorithm = "1step",
-                   step1_iter = 200, bound_error=0, 
-                   max_iter = 2000, burnin=1000, 
-                   details=TRUE){
+                   niter = 1100, burn=100,
+                   step2_niter = 1100, step2_burn=100, 
+                   threshold = seq(from=0.02, to=0.40, by=0.02),
+                   parallelize = TRUE, ncores = 10){
+  
+  ####################
+  ## Error handling ##
+  ####################
   
   # n, p, q
   n = dim(X)[1]
@@ -70,6 +88,7 @@ Mt_MBSP = function(X, Y, response_types,
     stop("Error: TPBN parameters u and a must be strictly positive.")
   if(tau <= 0 || tau>=1)
     stop("Error: Global shrinkage parameter tau should be strictly positive and between 0 and 1.")
+  if(tau < 1e-5) tau <- 1e-5 # To prevent tau from being too small
   if(d1 <= q-1)
     stop("Error: Inverse-Wishart degrees of freedom should be strictly greater than q-1.")
   if(d2 <= 0)
@@ -77,186 +96,248 @@ Mt_MBSP = function(X, Y, response_types,
   if(c1 <= 0 || c2 <= 0)
     stop("Error: Gamma parameters c1 and c2 must be strictly positive.")
   # Check to ensure that other arguments are reasonable.
-  if(max_iter <= burnin || burnin <= 0 || max_iter <= 0)
-    stop("Error: Please ensure reasonable arguments for max_iter and burnin, with max_iter > burnin.")
-  if(max_iter+burnin<=20)
-    stop("Error: max_iter is too small.")
+  if(niter <= burn || burn <= 0 || niter <= 0)
+    stop("Error: Please ensure reasonable arguments for niter and burn, with niter > burn.")
   if(!algorithm %in% c("1step","2step"))
     stop("Error: algorithm must be either '1step' or '2step'.")
   if(algorithm=="2step"){
-    if(step1_iter <= 0 || step1_iter >= max_iter || step1_iter >= burnin || step1_iter+burnin >= max_iter)
-      stop("Error: If using 2-step algorithm, we require step1_iter < burnin and step1_iter+burnin < max_iter.")
-    if(bound_error < 0)
-      stop("If using the 2-step algorithm, please specify a bound_error greater than 0.")
-    if(is.na(bound_error)){ 
-      # Set default bound error of 0.02 for bound_error in the 2-step algorithm if not specified by user
-      bound_error = 0.02
+    if(step2_niter <= step2_burn || step2_burn <= 0 || step2_niter <= 0)
+      stop("Error: Please ensure reasonable arguments for step2_niter and step2_burn, 
+            with step2_niter > step2_burn.")
+    if(!all(threshold>=0))
+      stop("If using the 2-step algorithm, the threshold must be nonnegative.")
+    if(all(is.na(threshold))){ 
+      # Set default as an equispaced grid from 0.02 to 0.4
+      threshold = seq(from=0.02, to=0.4, by=0.02)
     }
-  }
-
-  # Initial guesses for Gibbs sampler
-  
-  # Initial guesses for B and Sigma 
-  B_init <- matrix(0, p, q)
-  Sigma_init <- diag(q)
-  
-  # We can refine our initial guesses for B and Sigma for the entries that do NOT
-  # correspond to count outcomes.
-  which_not_count = which(response_types!='count')
-  
-  if(length(which_not_count)!=0){
-    lambda <- 0.01
-    XtY_not_count = t(X) %*% Y[,which_not_count]
-    
-    # Refine guess for the columns of B that do **not** correspond to count outcomes  
-    if(p <= n){
-       B_init[,which_not_count] <- chol2inv(chol(t(X)%*%X + lambda*diag(p))) %*% XtY_not_count
-    } else if(p > n) { 
-       # Using Woodbury matrix identity
-       term1 <- (1/lambda)*XtY_not_count
-       term2 <- (1/lambda^2)*t(X) %*% chol2inv(chol((1/lambda)*X%*%t(X) + diag(n))) %*% X %*% XtY_not_count
-       B_init[,which_not_count] <- term1 - term2
-    }
-    # Refine guess for the entries of Sigma that do **not** correspond to count outcomes
-    resid <- Y[,which_not_count] - X%*%B_init[,which_not_count]
-    Sigma_init[which_not_count, which_not_count] <- (n-1)/n * stats::cov(resid)
+    if(length(threshold)==1)
+      parallelize = FALSE
+    if(ncores <= 0)
+      stop("Number of cores should be greater than 0.")
+    if(ncores > floor(parallel::detectCores()*0.75)) 
+      ncores <- floor(parallel::detectCores()*0.75)
+    ncores <- as.integer(ncores)
   }
   
-  # Initial guesses for zeta and nu
-  zeta_init <- rep(a*tau,p) 
-  nu_init <- u*zeta_init 
+  #######################
+  ## Fit Mt-MBSP model ##
+  #######################
   
   if(algorithm=="1step"){
-    # If running 1-step algorithm, set bound error to be 0 just for good measure
-    bound_error <- 0
     # Run Gibbs sampler
     output <- Mt_MBSP_Gibbs(X, Y, response_types, u, a, tau, d1, d2, c1, c2,
-                            max_iter, burnin, bound_error, details,
-                            B_init, Sigma_init, zeta_init, nu_init)
-    # Return output
-    return(output)
+                            niter, burn, nugget=0.05, return_WAIC = FALSE)
+  
+    # Extract summary statistics
+    posterior_summaries <- Mt_MBSP_summary(output$B_samples, output$Sigma_samples,
+                                           threshold = 0)
+    # Return results
+    return(list(B_est = posterior_summaries$B_est,
+                B_active = posterior_summaries$B_active,
+                B_lower = posterior_summaries$B_lower,
+                B_upper = posterior_summaries$B_upper,
+                Sigma_est = posterior_summaries$Sigma_est,
+                Sigma_lower = posterior_summaries$Sigma_lower,
+                Sigma_upper = posterior_summaries$Sigma_upper,
+                B_samples = output$B_samples,
+                Sigma_samples = output$Sigma_samples))
     
   } else if(algorithm=="2step"){
-    # If running 2-step algorithm
     
-    cat("Stage 1:", "\n")
-    # Step 1: Run the Gibbs sampler for step1_iter iterations
+    cat("Running Stage 1.", "\n")
+    
+    # Step 1: Run the Gibbs sampler for niter iterations
     step1_output <- Mt_MBSP_Gibbs(X, Y, response_types, u, a, tau, d1, d2, c1, c2,
-                                  max_iter=step1_iter, burnin=ceiling(step1_iter/2), 
-                                  bound_error, details,
-                                  B_init, Sigma_init, zeta_init, nu_init)
+                                  niter=niter, burn=burn, nugget=0.01, return_WAIC = FALSE)
     
-    # Check the set J of active predictors
-    set_J <- which(rowSums(step1_output$B_active) != 0)
+    # Number of samples to save
+    nsave = niter-burn
+    step1_B_samples <- utils::tail(step1_output$B_samples, nsave)
+    step1_Sigma_samples <- utils::tail(step1_output$Sigma_samples, nsave)
+    step1_summaries <- Mt_MBSP_summary(step1_B_samples, step1_Sigma_samples,
+                                       threshold = 0)
     
-    # If Stage 1 result 
-    if(length(set_J)==0){
-         cat("Stage 1 resulted in a null model. Consider increasing bound_error.", "\n")
-         return(step1_ouput)
-    } else if(length(set_J) >= n) {
-        # If the set J has n or more predictors, further reduce its size to n-1
-        q_j <- rep(0, length(set_J))
+    # To hold results
+    threshold <- sort(threshold)
+    set_J <- vector(mode = "list", length = length(threshold))
+    
+    for(l in 1:length(threshold)){
+      # Get the set J_n of active predictors
+      tmp_summaries <- Mt_MBSP_summary(step1_B_samples, step1_Sigma_samples,
+                                       threshold=threshold[l])
+      set_J[[l]] <- which(rowSums(tmp_summaries$B_active) != 0)
+      
+      if(length(set_J) >= n) {
+        # If the active set has n or more predictors, further reduce its size to n-1
+        q_j <- rep(0, length(set_J[[l]]))
         for(jj in 1:length(q_j)){
-          q_j[jj] <- max(abs(step1_output$B_est[jj, ])) 
+          q_j[jj] <- max(abs(tmp_summaries$B_est[jj, ])) 
         }
         max_q_j_indices <- sort(utils::tail(order(q_j), n-1))
-        set_J <- set_J[max_q_j_indices]
+        set_J[[l]] <- set_J[[l]][max_q_j_indices]
+      }
     }
     
-    # Estimated set of inactive predictors  
-    set_Jc <- setdiff(seq(1:p), set_J)
-
-    cat("\n", "Stage 2:", "\n")
-    # Step 2: Run the Gibbs sampler with the smaller subset J
-    # Estimated set of active predictors
+    if(length(unlist(set_J))==0){
+        cat("Stage 1 resulted in a null model. Consider increasing the minimum threshold.", "\n")
+        tmp_summaries <- Mt_MBSP_summary(step1_B_samples, step1_Sigma_samples,
+                                         threshold=threshold[1])
+        return(list(B_est = matrix(0,p,q),
+                    B_active = matrix(0,p,q),
+                    B_lower = tmp_summaries$B_lower,
+                    B_upper = tmp_summaries$B_upper,
+                    Sigma_est = tmp_summaries$Sigma_est,
+                    Sigma_lower = tmp_summaries$Sigma_lower,
+                    Sigma_upper = tmp_summaries$Sigma_upper,
+                    B_samples = step1_B_samples,
+                    Sigma_samples = step1_Sigma_samples))
+    } 
     
-    # Initialize B, Sigma, zeta_init, and nu_init for Gibbs sampler  
-    X_2 <- as.matrix(X[, set_J]) # Step 2 is run with only the variables in candidate set J_n
-    B_init_2 <- step1_output$B_est[set_J,]
-    if(dim(X_2)[2]==1){ B_init_2 <- t(B_init_2) }
-    Sigma_init_2 <- step1_output$Sigma_est
-    zeta_init_2 <- rep(a*tau,length(set_J)) 
-    nu_init_2 <- u*zeta_init 
+    # Remove the empty elements of set_J 
+    nonempty_sets <- as.numeric(lapply(set_J, length) != 0)
+    threshold_nonempty <- threshold[which(nonempty_sets!=0)]
+    set_J <- set_J[which(nonempty_sets!=0)]
     
-    # New max_iter and burnin
-    step2_iter = max_iter - step1_iter
-    step2_burn = burnin - step1_iter 
+    # Run Stage 2 
+    if(parallelize==TRUE){
+      cat("Running Stage 2 in parallel for each threshold.", "\n")
     
-    # [1] Run Step 2 of the Gibbs sampler for max_iter-step1_iter iterations
-    # and no threshold gamma (bound_error=0)
-    step2_output <- Mt_MBSP_Gibbs(X=X_2, Y, response_types, u, a, tau, d1, d2, c2, c2,
-                                  max_iter=step2_iter, burnin=step2_burn, 
-                                  bound_error=0, details=details,
-                                  B_init=B_init_2, Sigma_init=Sigma_init_2, 
-                                  zeta_init=zeta_init_2, nu_init=nu_init_2)
-    # New output
-    B_est <- matrix(0, p, q)
-    B_active <- matrix(0, p, q)
-    B_lower <- matrix(0, p, q)
-    B_upper <- matrix(0, p, q)
-    
-    B_est[set_J, ] <- step2_output$B_est
-    B_active[set_J, ] <- step2_output$B_active
-    B_lower[set_J, ] <- step2_output$B_lower
-    B_upper[set_J, ] <- step2_output$B_upper
-    B_lower[set_Jc, ] <- -1e-5
-    B_upper[set_Jc, ] <- 1e-5
+      clusters <- parallel::makeCluster(ncores)
+      doParallel::registerDoParallel(clusters)
+      doRNG::registerDoRNG(1)
       
-    if(details==TRUE){
-      output <- list(
-        B_est = B_est,
-        B_active = B_active,
-        B_lower = B_lower,
-        B_upper = B_upper,
-        candidate_set = set_J,  
-        B_samples = step2_output$B_samples,
-        Sigma_est = step2_output$Sigma_est,
-        Sigma_lower = step2_output$Sigma_lower,
-        Sigma_upper = step2_output$Sigma_upper,
-        Sigma_samples = step2_output$Sigma_samples
-      )
-    } else{
-      list(
-        B_est = B_est,
-        B_active = B_active,
-        Sigma_est = step2_output$Sigma_est)    
+      step2_samples <- foreach::foreach(set_J=set_J, 
+                                        .export=c("Mt_MBSP_summary", "Mt_MBSP_Gibbs"),
+                                        .combine=list,
+                                        .multicombine=TRUE) %dorng% {
+      
+        # Step 2: Run the Gibbs sampler with the smaller subset J
+        X_2 <- as.matrix(X[, set_J]) # Step 2 is run with only the variables in candidate set J_n
+      
+        # Estimated set of active predictors
+        step2_gibbs <- Mt_MBSP_Gibbs(X=X_2, Y=Y, response_types=response_types, 
+                                     u=u, a=a, tau=tau, d1=d1, d2=d2, c1=c1, c2=c2,
+                                     niter=step2_niter, burn=step2_burn,
+                                     nugget=0.05, return_WAIC=TRUE)
+      
+        list(B_samples = step2_gibbs$B_samples,
+             Sigma_samples = step2_gibbs$Sigma_samples,
+             WAIC = step2_gibbs$WAIC,
+             set_J = set_J)
+      }
+      parallel::stopCluster(clusters)
+    
+    } else {
+      
+      # Do not parallelize
+      step2_samples <- vector(mode = "list", length = length(set_J))
+      
+      # Step 2: Run the Gibbs sampler with the smaller subset J
+      for(k in 1:length(step2_samples)){
+        
+        cat("Running Stage 2 for threshold", threshold_nonempty[k], "\n")
+        
+        
+        X_2 <- as.matrix(X[, set_J[[k]]]) # Step 2 is run with only the variables in candidate set J_n
+      
+        # Estimated set of active predictors
+        step2_gibbs <- Mt_MBSP_Gibbs(X=X_2, Y=Y, response_types=response_types, 
+                                     u=u, a=a, tau=tau, d1=d1, d2=d2, c1=c1, c2=c2,
+                                     niter=step2_niter, burn=step2_burn,
+                                     nugget=0.05, return_WAIC=TRUE)
+        
+        step2_samples[[k]] <- list(B_samples = step2_gibbs$B_samples,
+                                   Sigma_samples = step2_gibbs$Sigma_samples,
+                                   WAIC = step2_gibbs$WAIC,
+                                   set_J = set_J)
+      }
     }
+
+    # Extract posterior summaries
+    nonempty_card <- length(step2_samples)
+    step2_summaries <- vector(mode = "list", length = nonempty_card)
+    WAIC_vec <- rep(0, nonempty_card)
+    
+    for(k in 1:nonempty_card){
+      step2_summaries[[k]] <- Mt_MBSP_summary(step2_samples[[k]]$B_samples, 
+                                              step2_samples[[k]]$Sigma_samples,
+                                              threshold=0)
+    
+      # Store WAIC with threshold[k]
+      WAIC_vec[k] <- step2_samples[[k]]$WAIC
+    }
+    
+    # Final model chosen from WAIC
+    opt_index <- which.min(WAIC_vec)
+    opt_threshold <- threshold_nonempty[opt_index]
+    step2_final_samples <- step2_samples[[opt_index]]
+    step2_final_summaries <- step2_summaries[[opt_index]]
+    set_J_final <- set_J[[opt_index]]
+    set_Jc_final <- setdiff(seq(1:p), set_J_final)
+    
+    # New summaries
+    step2_B_est <- matrix(0, p, q)
+    step2_B_active <- matrix(0, p, q)
+    step2_B_lower <- matrix(0, p, q)
+    step2_B_upper <- matrix(0, p, q)
+    
+    # Estimates
+    step2_B_est[set_J_final, ] <- step2_final_summaries$B_est
+    step2_B_active[set_J_final, ] <- step2_final_summaries$B_active
+    step2_B_lower[set_J_final, ] <- step2_final_summaries$B_lower
+    step2_B_lower[set_Jc_final, ] <- step1_summaries$B_lower[set_Jc_final, ]
+    step2_B_upper[set_J_final, ] <- step2_final_summaries$B_upper
+    step2_B_upper[set_Jc_final, ] <- step1_summaries$B_upper[set_Jc_final, ]
+    step2_Sigma_est <- step2_final_summaries$Sigma_est
+    step2_Sigma_lower <- step2_final_summaries$Sigma_lower
+    step2_Sigma_upper <- step2_final_summaries$Sigma_upper
+    
+    return(list(B_est = step2_B_est,
+                B_active = step2_B_active,
+                B_lower = step2_B_lower,
+                B_upper = step2_B_upper,
+                Sigma_est = step2_Sigma_est,
+                Sigma_lower = step2_Sigma_lower,
+                Sigma_upper = step2_Sigma_upper,
+                opt_threshold = opt_threshold,
+                step1_B_samples = step1_B_samples,
+                step2_B_samples = step2_final_samples$B_samples,
+                Sigma_samples = step2_final_samples$Sigma_samples))
   }
 }
 
 
-##########################
-# GIBBS SAMPLER FUNCTION #
-##########################
+############################
+## GIBBS SAMPLER FUNCTION ##
+############################
 
 # Gibbs sampler for Mt-MBSP
 Mt_MBSP_Gibbs = function(X, Y, response_types, u, a, tau, d1, d2, c1, c2,
-                         max_iter, burnin, bound_error, details,
-                         B_init, Sigma_init, zeta_init, nu_init){
+                         niter, burn, nugget, return_WAIC){
 
   # sigmoid function
   sigmoid <- function(x){(1+exp(-x))^{-1}}
 
   # Extract dimensions n, p, and q
   # X is a n times p times n covariate matrix
-  n = dim(X)[1]
-  p = dim(X)[2]
-  q = dim(Y)[2]
+  n <- dim(X)[1]
+  p <- dim(X)[2]
+  q <- dim(Y)[2]
   
-  ################## 
-  # Initialization #
-  ##################
+  #################### 
+  ## Initialization ##
+  ####################
  
   # Initialize Gibbs sampler
-  B <- B_init
-  Sigma <- Sigma_init
-  zeta <- zeta_init
-  nu <- nu_init
-  # Initial guess for latent matrices Z and W
-  Z <- Y
-  W <- matrix(1,n,q) # default for Gaussian
+  B <- matrix(0,p,q)
+  Sigma <- diag(q)
+  zeta <- rep(1,p)
+  nu <- rep(1,p)
+  # Initialize W and Z
+  W <- matrix(0,n,q)  
+  Z <- matrix(0,n,q)
   # Initial guess for latent matrix latentU ~ N(0, Sb);
-  latentU <- Y-X%*%B
+  latentU <- matrix(0,n,q)
   
   # Matrix for updating the dispersion parameter r for count responses.
   # To make it consistent with response_types, only the indices that correspond
@@ -265,26 +346,32 @@ Mt_MBSP_Gibbs = function(X, Y, response_types, u, a, tau, d1, d2, c1, c2,
   # Initial guess for dispersion parameters
   dispersion_r[which(response_types=="count")] <- 10
     
-  #################
-  # Gibbs sampler #
-  #################
-  # Lists to hold the draws of B of Sigma
-  B_samples <- rep(list(matrix(0,p,q)), max_iter)
-  Sigma_samples <- rep(list(matrix(0,q,q)), max_iter)
+  ###################
+  ## Gibbs sampler ##
+  ###################
   
-  for(bj in 1:max_iter){
-    if (bj %% 100 == 0)
-      	cat("Iteration:", bj,"/",max_iter, "\n")
-    
-    ## Update nxq polya-Gamma weight matrix W
+  # Lists to hold the draws of B, Sigma, W, U, and Z
+  B_samples <- rep(list(matrix(0,p,q)), niter)
+  Sigma_samples <- rep(list(matrix(0,q,q)), niter)
 
+  # Also list WAIC samples if return_WAIC=TRUE
+  if(return_WAIC==TRUE)
+    logLL_samples <- matrix(0, nrow=n, ncol=niter)
+  
+  # Start Gibbs sampler
+  for(bj in 1:niter){
+    
+    if (bj %% 100 == 0)
+      cat("Iteration:", bj,"/",niter, "\n")
+    
+    # Update nxq polya-Gamma weight matrix W
     for(j in 1:q){
-      thetaj <- (X%*%B[,j]+latentU[,j])
+      thetaj <- X%*%B[,j]+latentU[,j]
       W[,j] <- switch(response_types[j],
-                      binary = BayesLogit::rpg(n,1, thetaj),
+                      binary = pmax(BayesLogit::rpg(n,1, thetaj), nugget), # for numerical stability
                       continuous = rep(1,n),
                       count = BayesLogit::rpg(n,Y[,j]+dispersion_r[j], thetaj))
-    
+      
       # For count responses, update dispersion parameters
       
       if(response_types[j]=='count'){
@@ -303,28 +390,26 @@ Mt_MBSP_Gibbs = function(X, Y, response_types, u, a, tau, d1, d2, c1, c2,
         dispersion_r[j] <- stats::rgamma(1, c1+sum(l), c2-sum(log(1-pp)))
       }
     }
-    vecW <- as.vector(W) #reset W.   
-  
-    # Update latent matrix Z
-    # for Z = (Y-U)/W; W==1 if Y is continuous
-  
+    
+    # Update latent matrix Z for Z = (Y-U)/W; W==1 if Y is continuous
     for(j in 1:q){
+      
       Z[,j] <- switch(response_types[j],
                       binary = (Y[,j]-1/2)/W[,j],
                       continuous = Y[,j],
                       count = (Y[,j]-(Y[,j]+dispersion_r[j])/2)/W[,j])
     }
-
+    
     # Update B
     for(j in 1:q){
       if(p<=n){
-         if(length(zeta)>1){
-           Delta_inv <- chol2inv(chol(t(X)%*%(X*W[,j])+diag(1/zeta)))
-         } else if(length(zeta)==1){
-           Delta_inv <- chol2inv(chol(t(X)%*%(X*W[,j])+1/zeta))
-         }
-         post_M <- Delta_inv %*% t(X*W[,j]) %*%(Z[,j]-latentU[,j])
-         B[,j] <- mvtnorm::rmvnorm(1, post_M, Delta_inv)
+        if(length(zeta)>1){
+          Delta_inv <- chol2inv(chol(t(X)%*%(X*W[,j])+diag(1/zeta)))
+        } else if(length(zeta)==1){
+          Delta_inv <- chol2inv(chol(t(X)%*%(X*W[,j])+1/zeta))
+        }
+        post_M <- Delta_inv %*% t(X*W[,j]) %*%(Z[,j]-latentU[,j])
+        B[,j] <- mvtnorm::rmvnorm(1, post_M, Delta_inv)
       }
       else if(p>n){
         # We use the fast sampling method from Bhattacharya et al. (2016)
@@ -338,19 +423,22 @@ Mt_MBSP_Gibbs = function(X, Y, response_types, u, a, tau, d1, d2, c1, c2,
         B[,j] <- JW
       }
     } 
-
+    
     # Update Sigma
     Sigma <- MCMCpack::riwish(n+d1, (t(latentU)%*%latentU)+diag(q)*d2)
-  
-    # Update latent variables matrix U
+    
+    # Update latent variables matrix U and logLL if return_WAIC=TRUE
     tmp_mat <- Z-X%*%B
     for(i in 1:n){
-       Omega_i <- diag(W[i,])
-       mm <- Omega_i%*%tmp_mat[i,]
-       JJ <- chol2inv(chol(Omega_i+Sigma))
-       latentU[i,] <- mvtnorm::rmvnorm(1, JJ%*%mm, JJ)
+      Omega_i <- diag(W[i,])
+      mm <- Omega_i%*%tmp_mat[i,]
+      JJ <- chol2inv(chol(Omega_i+Sigma))
+      latentU[i,] <- mvtnorm::rmvnorm(1, JJ%*%mm, JJ)
+      if(return_WAIC==TRUE){
+        logLL_samples[i,bj] = -0.5*t(tmp_mat[i,])%*%JJ%*%tmp_mat[i,]
+      }
     }
-
+    
     # Update zeta_i's and nu_i's
     for (i in 1:p){
       norm_term <- sum((t(B[i,]))^2) 
@@ -359,81 +447,121 @@ Mt_MBSP_Gibbs = function(X, Y, response_types, u, a, tau, d1, d2, c1, c2,
       nu[i] <- stats::rgamma(n=1, shape=a, scale=1/(tau+zeta[i]))
     }
     
-    B_samples[[bj]] <- B;
-    Sigma_samples[[bj]] <- Sigma;
+    # Save samples
+    B_samples[[bj]] <- B
+    Sigma_samples[[bj]] <- Sigma
   }
   
-  ########################
-  # end of Gibbs sampler #
-  ########################
+  ##########################
+  ## end of Gibbs sampler ##
+  ##########################
   
   # Discard burn-in 
-  B_samples <- utils::tail(B_samples, max_iter-burnin) # only contain the tail part
-  Sigma_samples <- utils::tail(Sigma_samples, max_iter-burnin) # only contain the tail part
-
-  # Extract the posterior median and 2.5th and 97.5th quantiles of B 
-  arrB<- array(unlist(B_samples), c(p,q,length(B_samples)))
-  B_est<-NULL; B_lower<-NULL;B_upper<-NULL;active_predictors<-NULL
-  for(j in 1:q){
-    mbsp_quantiles <- apply(arrB[,j,], 1, function(x) stats::quantile(x, prob=c(.025,.5,.975)))
-    
-    # Take posterior median as point estimate for B
-    B_est <- cbind(B_est, mbsp_quantiles[2,])
-    # For marginal credible intervals
-    B_lower <- cbind(B_lower, mbsp_quantiles[1,])
-    B_upper <- cbind(B_upper, mbsp_quantiles[3,])
-    
+  B_samples <- utils::tail(B_samples, niter-burn) 
+  Sigma_samples <- utils::tail(Sigma_samples, niter-burn) 
+  
+  # Calculate the WAIC if return_WAIC=TRUE
+  if(return_WAIC==TRUE){ 
+    logLL_samples <- logLL_samples[, (niter-burn+1):niter]
+    post_mean_logLL <- rowMeans(logLL_samples)  
+    post_var_logLL <- apply(logLL_samples, 1, var)
+    WAIC <- -2*sum(post_mean_logLL) + 2*sum(post_var_logLL)
   }
   
-  # Set J
-  B_lower <- ifelse(B_lower > -bound_error*stats::sd(B_lower), bound_error*stats::sd(B_lower), B_lower)
-  B_upper <- ifelse(B_upper < bound_error*stats::sd(B_upper), -bound_error*stats::sd(B_upper), B_upper)
-  # for active.predictors 
+  if(return_WAIC==TRUE){
+    output <- list(B_samples = B_samples,
+                   Sigma_samples = Sigma_samples,
+                   WAIC = WAIC)
+  } else {
+    output <- list(B_samples = B_samples,
+                   Sigma_samples = Sigma_samples)
+  }
+  
+  # Return list
+  return(output)
+}
+
+
+################################
+## EXTRACT SUMMARY STATISTICS ##
+################################
+
+# Set threshold = 0 for one-step algorithm
+# Otherwise threshold should be greater than 0
+Mt_MBSP_summary = function(B_samples, Sigma_samples, threshold=0){
+
+  p = nrow(B_samples[[1]])
+  q = ncol(B_samples[[1]])
+ 
+  # Extract the posterior median and 2.5th and 97.5th quantiles of B 
+  if(p>1){
+    arrB<- array(unlist(B_samples), c(p,q,length(B_samples)))
+    B_est<-NULL; B_lower<-NULL;B_upper<-NULL;active_predictors<-NULL
+    
+    for(j in 1:q){
+        mbsp_quantiles <- apply(arrB[,j,], 1, function(x) stats::quantile(x, prob=c(.025,.5,.975)))
+      
+        # Take posterior median as point estimate for B
+        B_est <- cbind(B_est, mbsp_quantiles[2,])
+        # For marginal credible intervals
+        B_lower <- cbind(B_lower, mbsp_quantiles[1,])
+        B_upper <- cbind(B_upper, mbsp_quantiles[3,])
+    }
+  } else {
+    # if p=1
+    B_est <- matrix(0, nrow=1, ncol=q)
+    B_lower <- matrix(0, nrow=1, ncol=q)
+    B_upper <- matrix(0, nrow=1, ncol=q)
+    
+    for(j in 1:q){
+      B1j <- unlist(lapply(B_samples, "[", 1, j))
+      
+      # Take posterior median as point estimate for B
+      B_est[1,j] <- as.numeric(stats::quantile(B1j, prob=0.5))
+      # For marginal credible intervals
+      B_lower[1,j] <- as.numeric(stats::quantile(B1j, prob=0.025))
+      B_upper[1,j] <- as.numeric(stats::quantile(B1j, prob=0.975))
+    }
+  }
+  
+  # set A_n
+  if(threshold > 0){
+    B_lower <- ifelse(B_lower > -threshold*stats::sd(B_lower), threshold*stats::sd(B_lower), B_lower)
+    B_upper <- ifelse(B_upper < threshold*stats::sd(B_upper), -threshold*stats::sd(B_upper), B_upper)
+  }
+  # for active_predictors 
   temp <- sign(B_lower)*sign(B_upper)
   active_predictors <- 1*(temp>=0)
 
-  # Return list of B_est, B_lower, 
-  # and B_upper, active.predictors 
-
+  # Point estimates and 95% posterior credible intervals for B 
   B_est <- matrix(B_est, p, q, byrow=F)
   B_lower <- matrix(B_lower, p, q, byrow=F)
   B_upper <- matrix(B_upper, p, q, byrow=F)
-  
+
   # Extract the posterior median and 2.5th and 97.5th quantiles of Sigma 
   arrS<- array(unlist(Sigma_samples), c(q,q,length(Sigma_samples)))
   Sigma_est<-NULL; Sigma_lower<-NULL;Sigma_upper<-NULL;
   for(j in 1:q){
-    Smbsp_quantiles <- apply(arrS[,j,], 1, function(x) stats::quantile(x, prob=c(.025,.5,.975)))
-    
-    # Take posterior median as point estimate for B
-    Sigma_est <- cbind(Sigma_est, Smbsp_quantiles[2,])
-    # For marginal credible intervals
-    Sigma_lower <- cbind(Sigma_lower, Smbsp_quantiles[1,])
-    Sigma_upper <- cbind(Sigma_upper, Smbsp_quantiles[3,])
+      Smbsp_quantiles <- apply(arrS[,j,], 1, function(x) stats::quantile(x, prob=c(.025,.5,.975)))
+
+      # Take posterior median as point estimate for B
+      Sigma_est <- cbind(Sigma_est, Smbsp_quantiles[2,])
+      # For marginal credible intervals
+      Sigma_lower <- cbind(Sigma_lower, Smbsp_quantiles[1,])
+      Sigma_upper <- cbind(Sigma_upper, Smbsp_quantiles[3,])
   }
-  
-  # Return list of Sigma_est, Sigma_lower, Sigma_upper
+
+  # point estimates and 95% posterior credible intervals for Sigma
   Sigma_est <- matrix(Sigma_est, q, q, byrow=F)
   Sigma_lower <- matrix(Sigma_lower, q, q, byrow=F)
   Sigma_upper <- matrix(Sigma_upper, q, q, byrow=F)
-  
 
-  if(details==TRUE){
-    output <- list(B_est = B_est,
-                   B_active = active_predictors,
-                   B_lower = B_lower,
-                   B_upper =  B_upper,
-                   B_samples = B_samples,
-                   Sigma_est = Sigma_est,
-                   Sigma_lower = Sigma_lower,
-                   Sigma_upper = Sigma_upper,
-                   Sigma_samples = Sigma_samples)
-  } else{
-    output <- list(B_est = B_est,
-                   B_active = active_predictors,
-                   Sigma_est = Sigma_est)
-  }
-  
-  # Return list
+  output <- list(B_est = B_est,
+                 B_active = active_predictors,
+                 B_lower = B_lower,
+                 B_upper = B_upper,
+                 Sigma_est = Sigma_est, 
+                 Sigma_lower = Sigma_lower,
+                 Sigma_upper = Sigma_upper)
   return(output)
 }
