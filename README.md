@@ -160,7 +160,7 @@ q <- 4    # number of multiple responses
 response_types <- c('continuous','binary','continuous','binary')
 
 # Set seed to reproduce results later
-set.seed(123)
+set.seed(1234)
 
 # Generate p-by-q regression coefficients matrix B0, where s=# of nonzero rows.
 B0 <- generate_B0(p, s, response_types)
@@ -172,22 +172,21 @@ X <- generate_X(n, p)
 Y <- generate_Y(X, B0, Sigma0, response_types)
 ```
 
-We next fit the two-step algorithm. In this case, we must specify `algorithm='2step'` in the `Mt_MBSP` function. We run Step 1 of the two-step approach with 200 iterations (i.e. `step1_iter=200`) and a threshold `bound_error=0.02`. 
-The total number of iterations is `max_iter=2000`, which indicates that we run Step 2 for 1800 iterations.
+We next fit the two-step algorithm. In this case, we must specify `algorithm='2step'` in the `Mt_MBSP` function. The argument `threshold` is a grid of candidate thresholds gamma which are tuned in Step 1 of the two-step algorithm. The value in `threshold` which minimizes the Watanabe–Akaike information criterion (WAIC) is used to select the final model in the two-step algorithm. If the two-step algorithm is used, then it may be advantageous to parallelize Step 2 of the algorithm (`parallelize=TRUE`). In this case, the Step 2 model for each candidate value in `threshold' is computed in parallel. 
 
 ```
-# Fit two-step model. In this case, you should specify the following arguments:
-#    algorithm='2step' 
-#    step1_iter (which should be less than burnin), 
-#    bound_error (threshold gamma)
+# Fit two-step model. In this case, you should specify algorithm='2step' 
 
 response_types <- c('continuous','binary','continuous','binary')
 
-output <- Mt_MBSP(X, Y, response_types,
-                  algorithm='2step', step1_iter=200, bound_error=0.02,
-                  max_iter=2000, burnin=1000)
+ncores <- floor(parallel::detectCores()*0.75)
 
-# VERY IMPORTANT: Need to make sure that the response_types argument in Mt_MBSP is correctly specified, 
+output <- Mt_MBSP(X, Y, response_types,
+                  algorithm='2step',
+                  threshold=seq(from=0.02, to=0.40, by=0.02),
+		  parallelize = TRUE, ncores = ncores)
+
+# VERY IMPORTANT: Need to make sure that the response_types argument in Mt_MBSP is correctly specified,
 # otherwise the code may not run correctly!
 ```
 
@@ -199,7 +198,7 @@ We can also obtain the following performance metrics.
 # root mean squared error (rMSE) for two-step estimator
 rMSE <- sqrt(sum((output$B_est-B0)^2)/(p*q))
 rMSE
-# rMSE = 0.08673294
+# rMSE = 0.02480118
 
 # Coverage probability (CP) for two-step estimator
 coverage_mat <- matrix(0, nrow=p, ncol=q)
@@ -212,7 +211,7 @@ for(j in 1:p){
 }
 CP <- sum(coverage_mat)/(p*q)
 CP 
-# CP = 0.9995
+# CP = 0.99975
 
 # Variable selection performance for two-step estimator
 classifications <- rep(0, p)
@@ -226,8 +225,7 @@ truth[true_nonzero_variables] <- 1
 
 # Compare selected variables to the ground truth significant variables
 selected_variables
-# 118 179 195 229 299 415 463 526 818 938
+# 101 284 400 623 645 848 900 905 918 934
 true_nonzero_variables
-# 118 179 195 229 299 415 463 526 818 938
+# 101 284 400 623 645 848 900 905 918 934
 ```
-
