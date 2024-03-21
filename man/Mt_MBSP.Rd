@@ -120,7 +120,7 @@ for(j in 1:p){
 CP <- sum(coverage_mat)/(p*q)
 CP 
 
-# Variable selection performance for two-step estimator
+# Variable selection performance for one-step estimator
 classifications <- rep(0, p)
 selected_variables <- which(rowSums(output$B_active)!=0)
 classifications[selected_variables] <- 1
