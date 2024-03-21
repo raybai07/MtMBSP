@@ -12,7 +12,7 @@
 # response_types = vector of q response types. The entries must be one of the following: "continuous", "binary", or "count"
 # u = first parameter in the TPBN family. Use (u,a)=(0.5,0.5) for the horseshoe prior
 # a = second parameter in the TPBN family. Use (u,a)=(0.5,0.5) for the horseshoe prior
-# tau = global shrinkage parameter
+# tau = global shrinkage parameter. Default is 1/(p*sqrt(n*log(n))). If this quantity is smaller than 1e-5, then the function resets tau to 1e-5. 
 # d1 = degrees of freedom in inverse-Wishart prior on Sigma
 # d2 = scale parameter in inverse-Wishart prior on Sigma
 # c1 = shape parameter in gamma prior on dispersion parameter r for count data. Ignored for non-count responses.
