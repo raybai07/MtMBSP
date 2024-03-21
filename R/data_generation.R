@@ -31,7 +31,7 @@ generate_B0 = function(p, s, response_types){
   q <- length(response_types) 
   B0 <- matrix(0,p,q)
   
-  # Randomly select 10 of the row indices to contain the nonzero rows
+  # Randomly select s of the row indices to contain the nonzero rows
   nonzero_indices <- sample(1:p, size=s, replace=FALSE)
   
   # Function for sample n times from the set [a,b] U [c,d]
@@ -55,7 +55,7 @@ generate_B0 = function(p, s, response_types){
   # Generate the nonzero entries of B0
   for(k in 1:length(response_types)){
     if(response_types[k]=="continuous" || response_types[k]=="binary"){
-      B0[nonzero_indices,k] <- sample_disjoint(s,-5,-0.5,0.5,5)
+      B0[nonzero_indices,k] <- sample_disjoint(s,-2,-0.5,0.5,2)
     } else if(response_types[k]=="count"){
       # Sample either -1 or 1
       sgn <- sample(c(-1,1), size=1, replace=FALSE)
@@ -76,7 +76,7 @@ generate_B0 = function(p, s, response_types){
 # rho = autocorrelation
 # sigma2 = global variance 
 
-generate_Sigma0 = function(q, rho=0.5, sigma2=1){
+generate_Sigma0 = function(q, rho=0.5, sigma2=0.2){
   # Make sure that q is a valid number.
   q <- ceiling(q)
   if(q<=0)
@@ -170,3 +170,5 @@ generate_Y = function(X, B0, Sigma0, response_types, r=50){
   }
   return(Y)
 }
+  
+ 
