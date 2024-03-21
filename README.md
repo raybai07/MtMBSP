@@ -22,11 +22,14 @@ library(MtMBSP)
 The main function to implement our method is `Mt_MBSP` which we will describe in detail and demonstrate how to use below. 
 
 ```
-Mt_MBSP(X, Y, response_types, 
-        u=0.5, a=0.5, tau=.001, d1 = dim(Y)[2], d2=10, c1=10, c2=1,
+Mt_MBSP(X, Y, response_types,
+        u=0.5, a=0.5, tau=1/(dim(X)[2]*sqrt(dim(X)[1]*log(dim(X)[1]))),
+        d1 = dim(Y)[2], d2=10, c1=10, c2=1,
         algorithm = "1step",
-        step1_iter = 200, bound_error=0, 
-        max_iter = 2000, burnin=1000, details=TRUE)
+        niter = 1100, burn=100,
+        step2_niter = 1100, step2_burn=100, 
+        threshold = seq(from=0.02, to=0.40, by=0.02),
+        parallelize = TRUE, ncores = 10)
 ```
 
 `X` is the n-by-p design matrix with n samples of p covariates.
@@ -49,16 +52,14 @@ in its fifth column, then we should pass `response_types = c("count","binary","c
 `algorithm` indicates whether to use the one-step approach (`"1step"`) or two-step approach (`"2step"`) for variable selection. The default is `"1step"`. However, for large p, it may be advantageous
 to use the two-step approach. If it is desired to use the two-step algorithm, then this argument should be `algorithm="2step"`.
 
-`step1_iter` indicates the number of iterations to run Step 1 of the two-step approach. This argument is only used if `algorithm="2step"`, and it must be less than `max_iter`.
+`niter` indicates the number of MCMC iterations to run in the one-step algorithm OR in Step 1 of the two-step algorithm. `burn` is the number of MCMC samples to discard as burnin. 
 
-`bound_error` is the threshold used to screen variables in Step 1 of the two-step approach. If `bound_error=0` is specified, then there is no variable screening step done.
-If `algorithm="2step"`, then the `Mt_MBSP` function will use a default of `bound_error=0.02` in Step 1. However, the user can specify a different nonnegative `bound_error` argument. Note, however, that `bound_error` is only used if `algorithm="2step"`.
+`step2_niter` indicates the number of MCMC iterations to run in Step 2 of the two-step algorithm, and `burn` is the number of MCMC to discard as burnin in Step 2. These arguments are only used if `algorithm="2step"`.
 
-`max_iter` is the total number of Gibbs sampling iterations to run.
+`threshold` is a grid of thresholds gamma to search over in Step 1 of the two-step algorithm. The threshold which minimizes the WAIC is used as the final model in Step 2. The default is an equispaced grid 0.02, 0.04, ..., 0.40. This argument is only used if `algorithm="2step"`.
 
-`burnin` is the number of burn-in samples, so that the final total number of MCMC samples to approximate the posterior is `max_iter-burnin`.
+`parallelize` is a Boolean variable for whether to parallelize Step 2 of the two-step algorithm over the grid of values in `threshold`. `ncores' is the number of cores to use for parallelization. These arguments are only used if `algorithm="2step"`. 
 
-`details` indicates whether to return all of the saved posterior samples and sample quantiles. By default, `details=TRUE`.
 
 ## 3. Additional Functions for Simulating Synthetic Data
 
