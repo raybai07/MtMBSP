@@ -58,7 +58,7 @@ to use the two-step approach. If it is desired to use the two-step algorithm, th
 
 `threshold` is a grid of thresholds gamma to search over in Step 1 of the two-step algorithm. The threshold which minimizes the WAIC is used as the final model in Step 2. The default is an equispaced grid 0.02, 0.04, ..., 0.40. This argument is only used if `algorithm="2step"`.
 
-`parallelize` is a Boolean variable for whether to parallelize Step 2 of the two-step algorithm over the grid of values in `threshold`. `ncores' is the number of cores to use for parallelization. These arguments are only used if `algorithm="2step"`. 
+`parallelize` is a Boolean variable for whether to parallelize Step 2 of the two-step algorithm over the grid of values in `threshold`. `ncores` is the number of cores to use for parallelization. These arguments are only used if `algorithm="2step"`. 
 
 
 ## 3. Additional Functions for Simulating Synthetic Data
