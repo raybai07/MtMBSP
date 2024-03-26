@@ -44,6 +44,7 @@
 # Sigma_lower = lower endpoints of 95% uncertainty intervals for entries in Sigma
 # Sigma_upper = upper endpoints of 95% uncertainty intervals for entries in Sigma
 # opt_threshold = optimal gamma chosen by minimizing WAIC. Only returned if "2step" is used for algorithm
+# set_J = the initial set J_n chosen in Step 1 if "2step" is used for algorithm
 # B_samples = MCMC samples of B saved after burn.
 #             If algorithm="2step", then the MCMC samples from Step 1 and Step 2 are both returned for B
 # Sigma_samples = MCMC samples of Sigma saved after burn
@@ -292,6 +293,7 @@ Mt_MBSP = function(X, Y, response_types,
     step2_Sigma_est <- step2_final_summaries$Sigma_est
     step2_Sigma_lower <- step2_final_summaries$Sigma_lower
     step2_Sigma_upper <- step2_final_summaries$Sigma_upper
+    step2_B_samples <- lapply(step2_final_samples$B_samples, function(x){ rownames(x)<- as.character(set_J_final); x})
     
     return(list(B_est = step2_B_est,
                 B_active = step2_B_active,
@@ -301,8 +303,9 @@ Mt_MBSP = function(X, Y, response_types,
                 Sigma_lower = step2_Sigma_lower,
                 Sigma_upper = step2_Sigma_upper,
                 opt_threshold = opt_threshold,
+                set_J = set_J_final,
                 step1_B_samples = step1_B_samples,
-                step2_B_samples = step2_final_samples$B_samples,
+                step2_B_samples = step2_B_samples,
                 Sigma_samples = step2_final_samples$Sigma_samples))
   }
 }
