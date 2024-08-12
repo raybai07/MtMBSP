@@ -197,7 +197,7 @@ We can also obtain the following performance metrics.
 # root mean squared error (rMSE) for two-step estimator
 rMSE <- sqrt(sum((output$B_est-B0)^2)/(p*q))
 rMSE
-# rMSE = 0.02480118
+# rMSE = 0.02479676
 
 # Coverage probability (CP) for two-step estimator
 coverage_mat <- matrix(0, nrow=p, ncol=q)
