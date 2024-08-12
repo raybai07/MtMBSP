@@ -206,8 +206,7 @@ Mt_MBSP = function(X, Y, response_types,
       clusters <- parallel::makeCluster(ncores)
       doParallel::registerDoParallel(clusters)
       doRNG::registerDoRNG(1)
-
-      %dorng%` <- doRNG::`%dorng%`
+      `%dorng%` <- doRNG::`%dorng%`
 
       step2_samples <- foreach::foreach(set_J=set_J, 
                                         .export=c("Mt_MBSP_summary", "Mt_MBSP_Gibbs"),
