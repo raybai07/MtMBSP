@@ -3,17 +3,6 @@
 # BAYESIAN MODEL WITH SHRINKAGE PRIORS              #
 #####################################################
 
-library(mvtnorm)
-library(GIGrvg) 
-library(MCMCpack) 
-library(BayesLogit) 
-library(stats) 
-library(utils)
-library(foreach)
-library(parallel)
-library(doParallel)
-library(doRNG)
-
 ## Authors: Dr. Ray Bai and Dr. Shao-Hsuan Wang
 ## Email:   raybaistat@gmail.com and picowang@gmail.com 
 
