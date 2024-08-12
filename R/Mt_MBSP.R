@@ -3,6 +3,17 @@
 # BAYESIAN MODEL WITH SHRINKAGE PRIORS              #
 #####################################################
 
+library(mvtnorm)
+library(GIGrvg) 
+library(MCMCpack) 
+library(BayesLogit) 
+library(stats) 
+library(utils)
+library(foreach)
+library(parallel)
+library(doParallel)
+library(doRNG)
+
 ## Authors: Dr. Ray Bai and Dr. Shao-Hsuan Wang
 ## Email:   raybaistat@gmail.com and picowang@gmail.com 
 
@@ -12,16 +23,16 @@
 # response_types = vector of q response types. The entries must be one of the following: "continuous", "binary", or "count"
 # u = first parameter in the TPBN family. Use (u,a)=(0.5,0.5) for the horseshoe prior
 # a = second parameter in the TPBN family. Use (u,a)=(0.5,0.5) for the horseshoe prior
-# tau = global shrinkage parameter. Default is 1/(p*sqrt(n*log(n))). If this quantity is smaller than 1e-5, then the function resets tau to 1e-5. 
+# tau = global shrinkage parameter
 # d1 = degrees of freedom in inverse-Wishart prior on Sigma
 # d2 = scale parameter in inverse-Wishart prior on Sigma
 # c1 = shape parameter in gamma prior on dispersion parameter r for count data. Ignored for non-count responses.
 # c2 = rate parameter in gamma prior on dispersion parameter r for count data. Ignored for non-count responses.
 # algorithm = one-step ("1step") or two-step ("2step"). Default is "1-step."
-# niter = number of MCMC iterations to run for one-step algorithm. Default is 1100.
-# burn = number of MCMC iterations to discard as burn-in for one-step algorithm. Default is 100.
-# step2_niter = number of MCMC iterations to run in step 2 of the two-step algorithm. Default is 1100.
-# step2_burn = number of MCMC iterations to discard as burn-in in step 2 of the two-step algorithm. Default is 100.
+# niter = number of MCMC iterations to run for one-step algorithm.
+# burn = number of MCMC iterations to discard as burn-in for one-step algorithm.
+# step2_niter = number of MCMC iterations to run in step 2 of the two-step algorithm.
+# step2_burn = number of MCMC iterations to discard as burn-in in step 2 of the two-step algorithm.
 # threshold = threshold gamma to be used in Step 1 of the two-step algorithm. 
 #             If the user specifies a single value, then this threshold is used for gamma.
 #             If the user specifies a grid, then the function searches for the optimal gamma that minimizes WAIC.
@@ -115,8 +126,8 @@ Mt_MBSP = function(X, Y, response_types,
       parallelize = FALSE
     if(ncores <= 0)
       stop("Number of cores should be greater than 0.")
-    if(ncores > floor(parallel::detectCores()*0.75)) 
-      ncores <- floor(parallel::detectCores()*0.75)
+    if((ncores > parallel::detectCores()-1)) 
+      ncores <- parallel::detectCores()-1
     ncores <- as.integer(ncores)
   }
   
@@ -127,7 +138,7 @@ Mt_MBSP = function(X, Y, response_types,
   if(algorithm=="1step"){
     # Run Gibbs sampler
     output <- Mt_MBSP_Gibbs(X, Y, response_types, u, a, tau, d1, d2, c1, c2,
-                            niter, burn, nugget=0.05, return_WAIC = FALSE)
+                            niter, burn, nugget=0.03, return_WAIC = FALSE)
   
     # Extract summary statistics
     posterior_summaries <- Mt_MBSP_summary(output$B_samples, output$Sigma_samples,
@@ -149,7 +160,7 @@ Mt_MBSP = function(X, Y, response_types,
     
     # Step 1: Run the Gibbs sampler for niter iterations
     step1_output <- Mt_MBSP_Gibbs(X, Y, response_types, u, a, tau, d1, d2, c1, c2,
-                                  niter=niter, burn=burn, nugget=0.01, return_WAIC = FALSE)
+                                  niter=niter, burn=burn, nugget=0.02, return_WAIC = FALSE)
     
     # Number of samples to save
     nsave = niter-burn
@@ -168,7 +179,7 @@ Mt_MBSP = function(X, Y, response_types,
                                        threshold=threshold[l])
       set_J[[l]] <- which(rowSums(tmp_summaries$B_active) != 0)
       
-      if(length(set_J) >= n) {
+      if(length(set_J[[l]]) >= n) {
         # If the active set has n or more predictors, further reduce its size to n-1
         q_j <- rep(0, length(set_J[[l]]))
         for(jj in 1:length(q_j)){
@@ -206,7 +217,6 @@ Mt_MBSP = function(X, Y, response_types,
       clusters <- parallel::makeCluster(ncores)
       doParallel::registerDoParallel(clusters)
       doRNG::registerDoRNG(1)
-      `%dorng%` <- doRNG::`%dorng%`
       
       step2_samples <- foreach::foreach(set_J=set_J, 
                                         .export=c("Mt_MBSP_summary", "Mt_MBSP_Gibbs"),
@@ -220,7 +230,7 @@ Mt_MBSP = function(X, Y, response_types,
         step2_gibbs <- Mt_MBSP_Gibbs(X=X_2, Y=Y, response_types=response_types, 
                                      u=u, a=a, tau=tau, d1=d1, d2=d2, c1=c1, c2=c2,
                                      niter=step2_niter, burn=step2_burn,
-                                     nugget=0.05, return_WAIC=TRUE)
+                                     nugget=0.03, return_WAIC=TRUE)
       
         list(B_samples = step2_gibbs$B_samples,
              Sigma_samples = step2_gibbs$Sigma_samples,
@@ -241,12 +251,12 @@ Mt_MBSP = function(X, Y, response_types,
         
         
         X_2 <- as.matrix(X[, set_J[[k]]]) # Step 2 is run with only the variables in candidate set J_n
-      
+        
         # Estimated set of active predictors
         step2_gibbs <- Mt_MBSP_Gibbs(X=X_2, Y=Y, response_types=response_types, 
                                      u=u, a=a, tau=tau, d1=d1, d2=d2, c1=c1, c2=c2,
                                      niter=step2_niter, burn=step2_burn,
-                                     nugget=0.05, return_WAIC=TRUE)
+                                     nugget=0.03, return_WAIC=TRUE)
         
         step2_samples[[k]] <- list(B_samples = step2_gibbs$B_samples,
                                    Sigma_samples = step2_gibbs$Sigma_samples,
@@ -293,7 +303,6 @@ Mt_MBSP = function(X, Y, response_types,
     step2_Sigma_est <- step2_final_summaries$Sigma_est
     step2_Sigma_lower <- step2_final_summaries$Sigma_lower
     step2_Sigma_upper <- step2_final_summaries$Sigma_upper
-    step2_B_samples <- lapply(step2_final_samples$B_samples, function(x){ rownames(x)<- as.character(set_J_final); x})
     
     return(list(B_est = step2_B_est,
                 B_active = step2_B_active,
@@ -305,7 +314,7 @@ Mt_MBSP = function(X, Y, response_types,
                 opt_threshold = opt_threshold,
                 set_J = set_J_final,
                 step1_B_samples = step1_B_samples,
-                step2_B_samples = step2_B_samples,
+                step2_B_samples = step2_final_samples$B_samples,
                 Sigma_samples = step2_final_samples$Sigma_samples))
   }
 }
@@ -439,7 +448,7 @@ Mt_MBSP_Gibbs = function(X, Y, response_types, u, a, tau, d1, d2, c1, c2,
       JJ <- chol2inv(chol(Omega_i+Sigma))
       latentU[i,] <- mvtnorm::rmvnorm(1, JJ%*%mm, JJ)
       if(return_WAIC==TRUE){
-        logLL_samples[i,bj] = -0.5*t(tmp_mat[i,])%*%JJ%*%tmp_mat[i,]
+        logLL_samples[i,bj] = -0.5*sum(2*log(diag(chol(Omega_i+Sigma)))) -0.5*t(tmp_mat[i,])%*%JJ%*%tmp_mat[i,]
       }
     }
     
