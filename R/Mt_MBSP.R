@@ -207,10 +207,12 @@ Mt_MBSP = function(X, Y, response_types,
       doParallel::registerDoParallel(clusters)
       doRNG::registerDoRNG(1)
 
+      %dorng%` <- doRNG::`%dorng%`
+
       step2_samples <- foreach::foreach(set_J=set_J, 
                                         .export=c("Mt_MBSP_summary", "Mt_MBSP_Gibbs"),
                                         .combine=list,
-                                        .multicombine=TRUE) doRNG::%dorng% {
+                                        .multicombine=TRUE) %dorng% {
       
         # Step 2: Run the Gibbs sampler with the smaller subset J
         X_2 <- as.matrix(X[, set_J]) # Step 2 is run with only the variables in candidate set J_n
