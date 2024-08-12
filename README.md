@@ -63,7 +63,7 @@ to use the two-step approach. If it is desired to use the two-step algorithm, th
 
 ## 3. Additional Functions for Simulating Synthetic Data
 
-In addition, there are several functions `generate_B0`, `generate_Sigma0`, `generate_X`, and `generate_Y`, which are used to generate synthetic datasets for the simulation studies in Section 5.1 of the manuscript.
+In addition, there are several functions `generate_B0`, `generate_Sigma0`, `generate_X`, and `generate_Y`, which are used to generate synthetic datasets.
 
 We demonstrate the usage of these functions, in addition to the main `Mt_MBSP` function in the simulated examples below.
 
@@ -112,7 +112,7 @@ We can also obtain the following performance metrics.
 # root mean squared error (rMSE) for one-step estimator
 rMSE <- sqrt(sum((output$B_est-B0)^2)/(p*q))
 rMSE
-# rMSE = 0.03031109
+# rMSE = 0.05837977
 
 # Coverage probability (CP) for one-step estimator
 coverage_mat <- matrix(0, nrow=p, ncol=q)
