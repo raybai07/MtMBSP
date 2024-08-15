@@ -180,7 +180,7 @@ Mt_MBSP = function(X, Y, response_types,
     }
     
     if(length(unlist(set_J))==0){
-        cat("Stage 1 resulted in a null model. Consider increasing the minimum threshold.", "\n")
+        cat("Stage 1 resulted in a null model. Consider increasing the minimum threshold for gamma.", "\n")
         tmp_summaries <- Mt_MBSP_summary(step1_B_samples, step1_Sigma_samples,
                                          threshold=threshold[1])
         return(list(B_est = matrix(0,p,q),
@@ -207,7 +207,7 @@ Mt_MBSP = function(X, Y, response_types,
       doParallel::registerDoParallel(clusters)
       doRNG::registerDoRNG(1)
       `%dorng%` <- doRNG::`%dorng%`
-
+      
       step2_samples <- foreach::foreach(set_J=set_J, 
                                         .export=c("Mt_MBSP_summary", "Mt_MBSP_Gibbs"),
                                         .combine=list,
