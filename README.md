@@ -148,7 +148,7 @@ MCC
 
 When p is large, it may be advantageous to use the two-step approach. The first step of our two-stage algorithm screens out a large number of variables using Gibbs sampling and a thresholding rule. An optimal threshold is chosen from a grid of candidate values in `threshold`. In the second step, the remaining regression coefficients are estimated with the Gibbs sampler. 
 
-Note that if p is much larger than n and the signals are all very weak, then the two-stage estimator may return a null model. In this case, it is recommended that the user increase the maximum candidate threshold in `threshold`.
+Note that if p is much larger than n and the signals are all very weak, then the two-step estimator may return a null model. In this case, it is recommended that the user increase the maximum candidate threshold in `threshold`.
 
 Below, we demonstrate how to use the `Mt_MBSP` function with the two-step algorithm on a simulated dataset with n=150, p=1000, s=10 (where s is the number of significant covariates), and q=4 responses with two continuous and two binary responses, i.e. `response_types = c('continuous','binary','continuous','binary')`.
 
@@ -198,7 +198,7 @@ We can also obtain the following performance metrics.
 # root mean squared error (rMSE) for two-step estimator
 rMSE <- sqrt(sum((output$B_est-B0)^2)/(p*q))
 rMSE
-# rMSE = 0.02479676
+# rMSE = 0.02662331
 
 # Coverage probability (CP) for two-step estimator
 coverage_mat <- matrix(0, nrow=p, ncol=q)
@@ -211,21 +211,24 @@ for(j in 1:p){
 }
 CP <- sum(coverage_mat)/(p*q)
 CP 
-# CP = 0.99975
+# CP = 0.99925
 
 # Variable selection performance for two-step estimator
-classifications <- rep(0, p)
-selected_variables <- which(rowSums(output$B_active)!=0)
-classifications[selected_variables] <- 1
+classifications_mat <- output$B_active
+ 
+TP <- as.numeric(length(which(classifications_mat==1 & B0!=0)))
+TN <- as.numeric(length(which(classifications_mat==0 & B0==0)))
+FP <- as.numeric(length(which(classifications_mat==1 & B0==0)))
+FN <- as.numeric(length(which(classifications_mat==0 & B0!=0)))
+ 
+sens <- TP/(TP+FN)
+spec <- TN/(TN+FP)
+MCC <- (TP*TN-FP*FN)/(sqrt((TP+FP)*(TP+FN)*(TN+FP)*(TN+FN)))
 
-# Ground truth
-truth <- rep(0, p)
-true_nonzero_variables <- which(rowSums(B0)!=0)
-truth[true_nonzero_variables] <- 1
-
-# Compare selected variables to the ground truth significant variables
-selected_variables
-# 101 284 400 623 645 848 900 905 918 934
-true_nonzero_variables
-# 101 284 400 623 645 848 900 905 918 934
+sens
+# sens = 0.9285714
+spec
+# spec = 1
+MCC
+# MCC = 0.9039272
 ```
