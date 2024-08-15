@@ -169,7 +169,7 @@ B0 <- generate_B0(p, s, response_types)
 # Generate n-by-p design matrix X
 X <- generate_X(n, p)
 # Generate n-by-q response matrix Y
-Y <- generate_Y(X, B0, Sigma0, response_types)
+Y <- generate_Y(X, B0, response_types)
 ```
 
 We next fit the two-step algorithm. In this case, we must specify `algorithm='2step'` in the `Mt_MBSP` function. The argument `threshold` is a grid of candidate thresholds gamma which are tuned in Step 1 of the two-step algorithm. The value in `threshold` which minimizes the Watanabe–Akaike information criterion (WAIC) is used to select the final model in the two-step algorithm. If the two-step algorithm is used, then it may also be advantageous to parallelize Step 2 of the algorithm (`parallelize=TRUE`). In this case, the Step 2 model for each candidate value in `threshold` is computed in parallel. 
