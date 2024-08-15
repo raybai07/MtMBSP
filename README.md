@@ -63,7 +63,7 @@ to use the two-step approach. If it is desired to use the two-step algorithm, th
 
 ## 3. Additional Functions for Simulating Synthetic Data
 
-In addition, there are several functions `generate_B0`, `generate_Sigma0`, `generate_X`, and `generate_Y`, which are used to generate synthetic datasets.
+In addition, there are several functions `generate_B0`, `generate_X`, and `generate_Y`, which are used to generate synthetic datasets using the settings in Section 5.1 of the paper.
 
 We demonstrate the usage of these functions, in addition to the main `Mt_MBSP` function in the simulated examples below.
 
@@ -83,8 +83,6 @@ set.seed(1234)
 
 # Generate p-by-q regression coefficients matrix B0, where s=# of nonzero rows.
 B0 <- generate_B0(p, s, response_types)
-# Generate true q-by-q covariance matrix Sigma0
-Sigma0 <- generate_Sigma0(q)
 # Generate n-by-p design matrix X
 X <- generate_X(n, p)
 # Generate n-by-q response matrix Y
