@@ -31,69 +31,44 @@ generate_B0 = function(p, s, response_types){
   q <- length(response_types) 
   B0 <- matrix(0,p,q)
   
-  # Randomly select s of the row indices to contain the nonzero rows
+  # Randomly select s of the rows to contain the nonzero rows
   nonzero_indices <- sample(1:p, size=s, replace=FALSE)
   
-  # Function for sample n times from the set [a,b] U [c,d]
-  sample_disjoint <- function(n, a,b,c,d){
-    # Initialize
-    sample_vec <- rep(0,n)
-    
-    # Sample entries in sample_vec
-    for(ntimes in 1:n){
-      y <- stats::runif(1, 0, b-a+d-c)
-      if( y < (b-a) ){
-        x <- a + y
-      }else{
-        x <- c + y - (b-a)
-      }
-      sample_vec[ntimes] <- x
+  
+  # Function for sample v times from the set [a,b] U [c,d]
+  sample_disjoint <- function(a,b,c,d){
+    y <- stats::runif(1, 0, b-a+d-c)
+    if( y < (b-a) ){
+      x <- a + y
+    }else{
+      x <- c + y - (b-a)
     }
-    return(sample_vec)
+    return(x)
   }
   
   # Generate the nonzero entries of B0
-  for(k in 1:length(response_types)){
-    if(response_types[k]=="continuous" || response_types[k]=="binary"){
-      B0[nonzero_indices,k] <- sample_disjoint(s,-2,-0.5,0.5,2)
-    } else if(response_types[k]=="count"){
-      # Sample either -1 or 1
-      sgn <- sample(c(-1,1), size=1, replace=FALSE)
-      if(sgn == 1){
-        B0[nonzero_indices,k] <- stats::runif(s, 0.3, 0.6)
-      } else if(sgn == -1){
-        B0[nonzero_indices,k] <- stats::runif(s, -0.6, -0.3)
+  for(m in 1:length(nonzero_indices)){
+    t <- sample(1:length(response_types), 1)
+    nonzero_entries <- sort(sample(1:length(response_types), size=t, replace=F))
+      
+    if(t==1){
+      if(response_types[nonzero_entries]=="continuous" || response_types[nonzero_entries]=="binary") 
+        B0[nonzero_indices[m], nonzero_entries] <- sample(c(-1.5,1.5), size=1)
+      if(response_types[nonzero_entries]=="count")
+        B0[nonzero_indices[m], nonzero_entries] < sample(c(-0.75,0.75), size=1)
+    } else if(t>1) {
+      
+      for(w in 1:length(nonzero_entries)){
+        if(response_types[nonzero_entries[w]]=="continuous" || response_types[nonzero_entries[w]]=="binary")
+          B0[nonzero_indices[m], nonzero_entries[w]] <- sample_disjoint(-2,-0.5,0.5,2)
+        if(response_types[nonzero_entries[w]]=="count")
+          B0[nonzero_indices[m], nonzero_entries[w]] <- sample_disjoint(-0.8,-0.4,0.4,0.8)
       }
     }
   }
   return(B0)
 }
   
-##########################################
-# GENERATE TRUE COVARIANCE MATRIX SIGMA0 #
-##########################################
-# q = number of response variables
-# rho = autocorrelation
-# sigma2 = global variance 
-
-generate_Sigma0 = function(q, rho=0.5, sigma2=0.2){
-  # Make sure that q is a valid number.
-  q <- ceiling(q)
-  if(q<=0)
-    stop("q should be non-negative.")
-  
-  # Make sure that rho and sigma2 have suitable values.
-  if(rho <= 0 || rho>=1 || sigma2 <= 0)
-    stop("Error: rho should be between 0 and 1 AND sigma2 should be strictly positive.")
-  
-  # Generate qxq Sigma0 with compound symmetry (CS) structure
-  Sigma0 <- matrix(rho, q, q)
-  diag(Sigma0) <- rep(1,q)
-
-  # Return Sigma0
-  return(sigma2*Sigma0)
-}
-
 ############################
 # GENERATE DESIGN MATRIX X #
 ############################
@@ -102,7 +77,7 @@ generate_Sigma0 = function(q, rho=0.5, sigma2=0.2){
 # rho = autocorrelation
 # sigma2 = global variance 
 
-generate_X = function(n, p, rho=0.5, sigma2=1){
+generate_X = function(n, p, rho=0.5){
   # Make sure that n and p are valid numbers.
   n <- ceiling(n)
   p <- ceiling(p)
@@ -110,12 +85,12 @@ generate_X = function(n, p, rho=0.5, sigma2=1){
     stop("Error: n and p should both be non-negative.")
   
   # Make sure that rho and sigma2 are suitable values.
-  if(rho <= -1 || rho>=1 || sigma2 <= 0)
+  if(rho <= -1 || rho>=1)
     stop("Error: rho should be between -1 and 1 AND sigma2 should be strictly positive.")
   
   times <- 1:p
   H <- abs(outer(times, times, "-"))
-  U <- sigma2*rho^H
+  U <- rho^H
   mu <- matrix(0, p)
   X <- mvtnorm::rmvnorm(n, mu, U)
   return(X)
@@ -131,25 +106,29 @@ generate_X = function(n, p, rho=0.5, sigma2=1){
 # r = number of successful trials. Only for count responses. 
 #     Default is r=50 for equidispersed data. Decrease r for overdispersed data. 
 
-generate_Y = function(X, B0, Sigma0, response_types, r=50){
+generate_Y = function(X, B0, response_types, rho=0.5, r=50){
   # Make sure that response_types contains only 'continuous', 'binary', or 'count'
   vals <- unique(response_types)
   if(!all(vals %in% c("binary","count","continuous")))
     stop("Error: response types must be one of: 'binary', 'count', or 'continuous.'")
   
-  # Make sure that the matrices are conformable
-  q <- length(response_types)
-  if(dim(B0)[2]!= q || dim(Sigma0)[1]!=q)
-    stop("Error: B0 and Sigma0 must have the same number of columns as the length of response_types.")
-  if(dim(X)[2] != dim(B0)[1])
-    stop("Error: The number of columns in X should be equal to the number of rows in B0.")
-  
-  # Generate random effects u
+  # Generate random effects u 
   n <- dim(X)[1]
-  u <- mvtnorm::rmvnorm(n,rep(0,q), Sigma0) 
-
-  # Generate theta
-  theta <- X %*% B0 + u
+  p <- dim(X)[2]
+  q <- dim(B0)[2]
+  
+  # Generate qxq Sigma0 with compound symmetry (CS) structure
+  Sigma0 <- matrix(rho, q, q)
+  diag(Sigma0) <- rep(1,q)
+  mu <- rep(0,q)
+  
+  # Generate u with signal-to-noise (SNR) of one
+  noise <- mvtnorm::rmvnorm(n, mu, Sigma0)
+  times <- 1:p
+  H <- abs(outer(times, times, "-"))
+  Sigma_X <- rho^H
+  sigma_e <- sqrt(sum(diag(t(B0)%*%Sigma_X%*%B0))/(sum(diag(t(noise)%*%noise))))
+  u <- sigma_e*noise
   
   # Sigmoid function
   sigmoid <-function(x){1/(1+exp(-x))}  
@@ -170,5 +149,3 @@ generate_Y = function(X, B0, Sigma0, response_types, r=50){
   }
   return(Y)
 }
-  
- 
