@@ -125,20 +125,23 @@ CP
 # CP = 1
 
 # Variable selection performance for one-step estimator
-classifications <- rep(0, p)
-selected_variables <- which(rowSums(output$B_active)!=0)
-classifications[selected_variables] <- 1
+classifications_mat <- output$B_active
+ 
+TP <- as.numeric(length(which(classifications_mat==1 & B0!=0)))
+TN <- as.numeric(length(which(classifications_mat==0 & B0==0)))
+FP <- as.numeric(length(which(classifications_mat==1 & B0==0)))
+FN <- as.numeric(length(which(classifications_mat==0 & B0!=0)))
+ 
+sens <- TP/(TP+FN)
+spec <- TN/(TN+FP)
+MCC <- (TP*TN-FP*FN)/(sqrt((TP+FP)*(TP+FN)*(TN+FP)*(TN+FN)))
 
-# Ground truth
-truth <- rep(0, p)
-true_nonzero_variables <- which(rowSums(B0)!=0)
-truth[true_nonzero_variables] <- 1
-
-# Compare selected variables to the ground truth significant variables 
-selected_variables 
-# 101 284 336 406 492
-true_nonzero_variables
-# 101 284 336 406 492
+sens
+# sens = 0.8181818
+spec
+# spec = 1
+MCC
+# MCC = 0.9039272
 ```
 
 ## 5. Example of the Two-step Approach for Large p
