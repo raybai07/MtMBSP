@@ -86,7 +86,7 @@ B0 <- generate_B0(p, s, response_types)
 # Generate n-by-p design matrix X
 X <- generate_X(n, p)
 # Generate n-by-q response matrix Y
-Y <- generate_Y(X, B0, Sigma0, response_types)
+Y <- generate_Y(X, B0, response_types)
 ```
 
 We then fit the Mt-MBSP model as follows using the main `Mt_MBSP` function.
