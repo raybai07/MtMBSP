@@ -166,8 +166,6 @@ set.seed(1234)
 
 # Generate p-by-q regression coefficients matrix B0, where s=# of nonzero rows.
 B0 <- generate_B0(p, s, response_types)
-# Generate true q-by-q covariance matrix Sigma0
-Sigma0 <- generate_Sigma0(q)
 # Generate n-by-p design matrix X
 X <- generate_X(n, p)
 # Generate n-by-q response matrix Y
