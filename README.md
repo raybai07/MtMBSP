@@ -43,7 +43,7 @@ It is extremely important that this vector give the correct response types corre
 For example, if `Y` contains a count variable in its first column, a binary variable in its second column, a continuous variable in the third column, another continuous variable in the fourth column, and another binary variable 
 in its fifth column, then we should pass `response_types = c("count","binary","continuous","continuous","binary")` to the `Mt_MBSP` function.
 
-`u` and `a` are the hyperparameters in the TPBN prior for the local scale parameters. `u=0.5` and `a=0.5` correspond to the popular horseshoe prior of Carvalho et al. (2010).  Meanwhile, `tau` is the global hyperparameter in the TPBN prior. The default for `tau` is 1/(p * sqrt(n * log(n))). If this quantity becomes lower than `1e-5`, then `tau` is set as `1e-5` for numerical stability reasons. If p is much than n and all of the signals in the data are very weak, then our method may select a null model. In this case, it is recommended that the user increase the value of `tau`.
+`u` and `a` are the hyperparameters in the TPBN prior for the local scale parameters. `u=0.5` and `a=0.5` correspond to the popular horseshoe prior of Carvalho et al. (2010).  Meanwhile, `tau` is the global hyperparameter in the TPBN prior. The default for `tau` is 1/(p * sqrt(n * log(n))). If this quantity becomes lower than `1e-5`, then `tau` is set as `1e-5` for numerical stability reasons. If p is much larger than n and all of the signals in the data are very weak, then our method may select a null model. In this case, it is recommended that the user increase the value of `tau` so there is less global shrinkage.
 
 `d1` and `d2` are the degrees of freedom and the scale parameter in the inverse-Wishart prior on Sigma.
 
