@@ -69,7 +69,7 @@ We demonstrate the usage of these functions, in addition to the main `Mt_MBSP` f
 
 ## 4. Example of the One-step Approach
 
-To demonstrate the `Mt_MBSP` function, we first illustrate it on a small synthetic dataset with n=100, p=20, s=5 (where s is the number of significant covariates), and q=3 responses which are binary, continuous, and count, i.e. `response_types = c('binary','continuous','count')`.
+To demonstrate the `Mt_MBSP` function, we first illustrate it on a synthetic dataset with n=100, p=500, s=5 (where s is the number of significant covariates), and q=3 responses which are binary, continuous, and count, i.e. `response_types = c('binary','continuous','count')`.
 
 ```
 n <- 100  # sample size 
