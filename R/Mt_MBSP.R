@@ -3,8 +3,8 @@
 # BAYESIAN MODEL WITH SHRINKAGE PRIORS              #
 #####################################################
 
-## Authors: Dr. Ray Bai and Dr. Shao-Hsuan Wang
-## Email:   raybaistat@gmail.com and picowang@gmail.com 
+## Authors: Ray Bai, Shao-Hsuan Wang, and Hsin-Hsiung Huang 
+## Email:   raybaistat@gmail.com, picowang@gmail.com, and hsin-hsiung.huang@ucf.edu
 
 # INPUT:
 # X = n-by-p design matrix
